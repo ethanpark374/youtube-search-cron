@@ -1,0 +1,125 @@
+name: AI Video Collection Pipeline
+
+on:
+  schedule:
+    # KST 08:00, 20:00 목표 (GitHub Actions 1-3h 지연 감안)
+    - cron: '0 22,10 * * *'
+  workflow_dispatch:
+
+jobs:
+  collect:
+    name: Step 1 - Keyword Search
+    runs-on: ubuntu-latest
+    steps:
+      - name: Search all keywords
+        run: |
+          API="https://youtube-search-eight-chi.vercel.app/api/cron/collect"
+          AUTH="Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+
+          KEYWORDS=(
+            "KlingAI" "Runway" "LumaAI" "Seedance" "Veo" "Veo3"
+            "Higgsfield" "HailuoAI" "Pika" "Wan26" "HeyGen" "Hedra"
+            "Dreamina" "ViggleAI" "StableDiffusion" "ComfyUI" "PixVerse"
+            "Suno" "Udio" "AICover" "AIVoiceover"
+            "AIAvatar" "AIInfluencer" "AIAgent" "FacelessChannel"
+            "AIGenerated" "MadeWithAI" "AIVideo" "AIGeneratedVideo"
+            "AIShorts" "AIFilm" "AICinema" "AIAnimation" "AILookbook"
+            "AIArtist" "TextToVideo" "ImageToVideo" "NoCamera" "SyntheticMedia" "FalAI"
+            "AI%EC%98%81%EC%83%81" "AI%EC%95%A0%EB%8B%88%EB%A9%94%EC%9D%B4%EC%85%98"
+            "AI%EB%A3%A9%EB%B6%81" "AI%EC%98%81%ED%99%94" "AI%EC%87%BC%EC%B8%A0" "AI%EC%88%8F%ED%8F%BC"
+            "Shorts" "FYP" "AI"
+          )
+
+          echo "=== Step 1: Collecting ${#KEYWORDS[@]} keywords ==="
+          TOTAL_SAVED=0
+          for kw in "${KEYWORDS[@]}"; do
+            RESULT=$(curl -s "$API?q=$kw" -H "$AUTH")
+            COUNT=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('count',0))" 2>/dev/null || echo 0)
+            TOTAL_SAVED=$((TOTAL_SAVED + COUNT))
+            echo "  $kw: $COUNT saved"
+            sleep 3
+          done
+          echo "Step 1 done: $TOTAL_SAVED total saved"
+
+  verify:
+    name: Step 2 - AI Label Verification
+    needs: collect
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify possible videos with getInfo
+        run: |
+          API="https://youtube-search-eight-chi.vercel.app/api/cron/recheck"
+          AUTH="Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+
+          echo "=== Step 2: Verifying possible videos ==="
+          TOTAL_UPGRADED=0
+          TOTAL_CHECKED=0
+
+          for i in $(seq 1 100); do
+            RESULT=$(curl -s "$API?limit=15" -H "$AUTH")
+            CHECKED=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('checked',0))" 2>/dev/null || echo 0)
+            UPGRADED=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('upgraded',0))" 2>/dev/null || echo 0)
+            REMAINING=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('remaining',0))" 2>/dev/null || echo 0)
+
+            TOTAL_CHECKED=$((TOTAL_CHECKED + CHECKED))
+            TOTAL_UPGRADED=$((TOTAL_UPGRADED + UPGRADED))
+
+            if [ "$((i % 10))" -eq 0 ]; then
+              echo "  Round $i: $TOTAL_CHECKED checked, $TOTAL_UPGRADED upgraded, $REMAINING remaining"
+            fi
+
+            # possible 0이면 종료
+            if [ "$REMAINING" -eq 0 ] || [ "$CHECKED" -eq 0 ]; then
+              echo "  No more possible videos. Stopping at round $i."
+              break
+            fi
+
+            sleep 5
+          done
+          echo "Step 2 done: $TOTAL_CHECKED checked, $TOTAL_UPGRADED upgraded to confirmed"
+
+  depth:
+    name: Step 3 - Depth Exploration
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explore confirmed channels and related videos
+        run: |
+          API="https://youtube-search-eight-chi.vercel.app/api/cron/depth"
+          AUTH="Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+
+          echo "=== Step 3: Depth exploration ==="
+          TOTAL_SAVED=0
+
+          for i in $(seq 1 20); do
+            RESULT=$(curl -s "$API?channels=2&perChannel=8&related=5" -H "$AUTH")
+            SAVED=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('saved',0))" 2>/dev/null || echo 0)
+            CHANNELS=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('channelsCrawled',0))" 2>/dev/null || echo 0)
+            RELATED=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('relatedFound',0))" 2>/dev/null || echo 0)
+
+            TOTAL_SAVED=$((TOTAL_SAVED + SAVED))
+            echo "  Round $i: channels=$CHANNELS, related=$RELATED, saved=$SAVED"
+
+            if [ "$SAVED" -eq 0 ] && [ "$i" -gt 3 ]; then
+              echo "  No new videos found. Stopping."
+              break
+            fi
+
+            sleep 5
+          done
+          echo "Step 3 done: $TOTAL_SAVED additional AI videos discovered"
+
+  refresh:
+    name: Step 4 - Stats Refresh
+    needs: depth
+    runs-on: ubuntu-latest
+    steps:
+      - name: Update views and viralScore
+        run: |
+          API="https://youtube-search-eight-chi.vercel.app/api/cron/refresh-stats"
+          AUTH="Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+
+          echo "=== Step 4: Refreshing stats ==="
+          RESULT=$(curl -s "$API?days=3&limit=500" -H "$AUTH")
+          echo "$RESULT"
+          echo "Step 4 done."
