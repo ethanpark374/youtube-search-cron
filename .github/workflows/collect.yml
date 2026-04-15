@@ -54,23 +54,28 @@ jobs:
           echo "=== Step 2: Verifying possible videos ==="
           TOTAL_UPGRADED=0
           TOTAL_CHECKED=0
+          OFFSET=0
+          BATCH=15
 
           for i in $(seq 1 100); do
-            RESULT=$(curl -s "$API?limit=15" -H "$AUTH")
+            RESULT=$(curl -s "$API?limit=$BATCH&offset=$OFFSET" -H "$AUTH")
             CHECKED=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('checked',0))" 2>/dev/null || echo 0)
             UPGRADED=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('upgraded',0))" 2>/dev/null || echo 0)
-            REMAINING=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('remaining',0))" 2>/dev/null || echo 0)
+            TOTAL_COUNT=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('total',0))" 2>/dev/null || echo 0)
+            NEXT_OFFSET=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('nextOffset',0))" 2>/dev/null || echo 0)
 
             TOTAL_CHECKED=$((TOTAL_CHECKED + CHECKED))
             TOTAL_UPGRADED=$((TOTAL_UPGRADED + UPGRADED))
+            # confirmed된 만큼 offset 조정 (confirmed 영상은 possible에서 빠지므로)
+            OFFSET=$((NEXT_OFFSET - UPGRADED))
 
             if [ "$((i % 10))" -eq 0 ]; then
-              echo "  Round $i: $TOTAL_CHECKED checked, $TOTAL_UPGRADED upgraded, $REMAINING remaining"
+              echo "  Round $i: $TOTAL_CHECKED/$TOTAL_COUNT checked, $TOTAL_UPGRADED upgraded"
             fi
 
-            # possible 0이면 종료
-            if [ "$REMAINING" -eq 0 ] || [ "$CHECKED" -eq 0 ]; then
-              echo "  No more possible videos. Stopping at round $i."
+            # 전부 체크했으면 종료
+            if [ "$CHECKED" -eq 0 ] || [ "$OFFSET" -ge "$TOTAL_COUNT" ]; then
+              echo "  All possible videos checked. Stopping at round $i."
               break
             fi
 
