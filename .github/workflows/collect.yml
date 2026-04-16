@@ -2,31 +2,66 @@ name: Innertube AI Video Pipeline
 
 on:
   schedule:
-    # KST 06:00, 12:00, 18:00, 00:00 목표 (4회/일, 지연 감안 1시간 앞당김)
-    - cron: '0 20,2,8,14 * * *'
+    # 6회/일, 4시간마다 (KST 목표 시간, GitHub 지연 1-2h 감안)
+    # UTC 22,2,6,10,14,18 → KST ~08,12,16,20,00,04 실행 예상
+    - cron: '0 22,2,6,10,14,18 * * *'
   workflow_dispatch:
 
 jobs:
   collect:
-    name: Step 1 - Innertube Keyword Search
+    name: Step 1 - Keyword Search
     runs-on: ubuntu-latest
     steps:
-      - name: Search all keywords (no getInfo, fast)
+      - name: Search all keywords
         run: |
           API="https://youtube-search-eight-chi.vercel.app/api/cron/collect"
           AUTH="Authorization: Bearer ${{ secrets.CRON_SECRET }}"
 
           KEYWORDS=(
+            # 🔴 AI 영상 생성 도구
             "KlingAI" "Runway" "LumaAI" "Seedance" "Veo" "Veo3"
             "Higgsfield" "HailuoAI" "Pika" "Wan26" "HeyGen" "Hedra"
             "Dreamina" "ViggleAI" "StableDiffusion" "ComfyUI" "PixVerse"
+
+            # 🔴 AI 음악/보이스
             "Suno" "Udio" "AICover" "AIVoiceover"
+
+            # 🔴 AI 아바타/인플루언서
             "AIAvatar" "AIInfluencer" "AIAgent" "FacelessChannel"
+
+            # 🔴 AI 콘텐츠 태그 (영문)
             "AIGenerated" "MadeWithAI" "AIVideo" "AIGeneratedVideo"
             "AIShorts" "AIFilm" "AICinema" "AIAnimation" "AILookbook"
-            "AIArtist" "TextToVideo" "ImageToVideo" "NoCamera" "SyntheticMedia" "FalAI"
+            "AIArtist" "TextToVideo" "ImageToVideo" "NoCamera"
+            "SyntheticMedia" "FalAI"
+
+            # 🔴 AI 콘텐츠 태그 (한국어 기존)
             "AI%EC%98%81%EC%83%81" "AI%EC%95%A0%EB%8B%88%EB%A9%94%EC%9D%B4%EC%85%98"
             "AI%EB%A3%A9%EB%B6%81" "AI%EC%98%81%ED%99%94" "AI%EC%87%BC%EC%B8%A3" "AI%EC%88%8F%ED%8F%BC"
+
+            # 🔴 한국어 AI 콘텐츠 키워드 (신규 추가)
+            "AI%EB%A8%B9%EB%B0%A9"
+            "AI%EC%BB%A4%EB%B2%84"
+            "AI%EB%85%B8%EB%9E%98"
+            "AI%EB%93%9C%EB%9D%BC%EB%A7%88"
+            "AI%EB%AE%A4%EC%A7%81%EB%B9%84%EB%94%94%EC%98%A4"
+            "AI%20ASMR"
+            "AI%EA%B0%95%EC%95%84%EC%A7%80"
+            "AI%EA%B3%A0%EC%96%91%EC%9D%B4"
+            "AI%EC%BD%94%EB%AF%B8%EB%94%94"
+            "AI%EB%8B%A8%ED%8E%B8%EC%98%81%ED%99%94"
+            "AI%EB%B3%B4%EC%9D%B4%EC%8A%A4"
+            "AI%EC%95%84%EB%B0%94%ED%83%80"
+            "AI%EB%8C%84%EC%8A%A4"
+            "AI%ED%8A%B8%EB%A1%AF"
+            "AI%ED%9E%99%ED%95%A9"
+            "AI%EC%9B%B9%ED%88%B0"
+            "AI%ED%8C%A8%EC%85%98"
+            "AI%EB%B7%B0%ED%8B%B0"
+            "AI%EB%9E%A9"
+            "AI%EC%83%9D%EC%84%B1%EC%98%81%EC%83%81"
+
+            # 🔴 범용
             "Shorts" "FYP" "AI"
           )
 
@@ -34,7 +69,7 @@ jobs:
           for kw in "${KEYWORDS[@]}"; do
             curl -s "$API?q=$kw" -H "$AUTH" > /dev/null
             echo "  $kw"
-            sleep 3
+            sleep 2
           done
 
   verify:
@@ -52,7 +87,7 @@ jobs:
           TOTAL_UPGRADED=0
           TOTAL_CHECKED=0
 
-          for i in $(seq 1 100); do
+          for i in $(seq 1 120); do
             RESULT=$(curl -s "$API?limit=15&offset=$OFFSET" -H "$AUTH")
             CHECKED=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('checked',0))" 2>/dev/null || echo 0)
             UPGRADED=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('upgraded',0))" 2>/dev/null || echo 0)
@@ -88,13 +123,13 @@ jobs:
           echo "=== Step 3: Depth Exploration ==="
           TOTAL_SAVED=0
 
-          for i in $(seq 1 20); do
-            RESULT=$(curl -s "$API?channels=2&perChannel=8&related=5" -H "$AUTH")
+          for i in $(seq 1 30); do
+            RESULT=$(curl -s "$API?channels=5&perChannel=15&related=8" -H "$AUTH")
             SAVED=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('saved',0))" 2>/dev/null || echo 0)
             TOTAL_SAVED=$((TOTAL_SAVED + SAVED))
-            echo "  Round $i: +$SAVED saved (total: $TOTAL_SAVED)"
+            echo "  Round $i: +$SAVED (total: $TOTAL_SAVED)"
 
-            if [ "$SAVED" -eq 0 ] && [ "$i" -gt 3 ]; then
+            if [ "$SAVED" -eq 0 ] && [ "$i" -gt 5 ]; then
               echo "  No new discoveries. Stopping."
               break
             fi
