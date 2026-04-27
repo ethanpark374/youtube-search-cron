@@ -162,8 +162,8 @@ jobs:
           API="https://youtube-search-eight-chi.vercel.app/api/cron/analyze-trend"
           AUTH="Authorization: Bearer ${{ secrets.CRON_SECRET }}"
 
-          echo "=== Step 5: Gemini Trend Analysis ==="
-          RESULT=$(curl -s "$API" -H "$AUTH")
+          echo "=== Step 5: Gemini Trend Analysis (18 combinations) ==="
+          RESULT=$(curl -s --max-time 280 "$API" -H "$AUTH")
           echo "$RESULT"
           echo ""
           echo "Trend analysis done."
