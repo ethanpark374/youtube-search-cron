@@ -151,3 +151,19 @@ jobs:
           curl -s "$API?days=3&limit=500" -H "$AUTH"
           echo ""
           echo "Done."
+
+  analyze:
+    name: Step 5 - Gemini Trend Analysis
+    needs: refresh
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate daily trend analysis (KR + WORLD)
+        run: |
+          API="https://youtube-search-eight-chi.vercel.app/api/cron/analyze-trend"
+          AUTH="Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+
+          echo "=== Step 5: Gemini Trend Analysis ==="
+          RESULT=$(curl -s "$API" -H "$AUTH")
+          echo "$RESULT"
+          echo ""
+          echo "Trend analysis done."
